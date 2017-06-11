@@ -52,16 +52,27 @@ func checkImported(imports []*ast.ImportSpec) bool {
 // astWalker walks the AST
 func astWalker(file *ast.File, fset *token.FileSet, n ast.Node) bool {
 	switch stmt := n.(type) {
-	case *ast.CallExpr:
-		expr, ok := stmt.Fun.(*ast.SelectorExpr)
-		if !ok {
-			break
-		}
-		ident := expr.X.(*ast.Ident)
-		if ident.Name == "logrus" {
-			ln := fset.Position(stmt.Pos()).Line
-			msg := stmt.Args[0].(*ast.BasicLit).Value
-			logrus.Infof("At line %d, msg: %s", ln, msg)
+	case *ast.FuncDecl:
+		funcName := stmt.Name.Name
+		for _, s := range stmt.Body.List {
+			exprStmt, ok := s.(*ast.ExprStmt)
+			if !ok {
+				continue
+			}
+			callExpr, ok := exprStmt.X.(*ast.CallExpr)
+			if !ok {
+				continue
+			}
+			selectorExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+			if !ok {
+				continue
+			}
+			ident := selectorExpr.X.(*ast.Ident)
+			if ident.Name == "logrus" {
+				ln := fset.Position(stmt.Pos()).Line
+				msg := callExpr.Args[0].(*ast.BasicLit).Value
+				logrus.Infof("Function: %s:%d, msg: %s", funcName, ln, msg)
+			}
 		}
 	}
 	return true
