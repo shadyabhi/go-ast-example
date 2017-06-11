@@ -31,12 +31,20 @@ func main() {
 
 	// Print AST for debugging
 	// ast.Print(fset, file)
-	ifImport := checkImported(file.Imports)
-	if ifImport {
-		logrus.Infoln("logrus imports found")
-		// Let's find line numbers
+	logrusImported := checkImported(file.Imports)
+
+	var filename, funcName string
+	var line, pos int
+
+	if logrusImported {
+		logrus.Debugf("logrus imports found")
 		ast.Inspect(file, func(n ast.Node) bool {
-			return astWalker(file, fset, n)
+			filename, funcName, line, pos = astWalker(file, fset, n)
+			// Not all nodes have logrus
+			if filename != "" {
+				logrus.Infof("File=%s, Function=%s, LineNo=%d, Pos=%d", filename, funcName, line, pos)
+			}
+			return true
 		})
 	}
 }
@@ -52,10 +60,10 @@ func checkImported(imports []*ast.ImportSpec) bool {
 }
 
 // astWalker walks the AST
-func astWalker(file *ast.File, fset *token.FileSet, n ast.Node) bool {
+func astWalker(file *ast.File, fset *token.FileSet, n ast.Node) (filename, funcName string, line, pos int) {
 	switch stmt := n.(type) {
 	case *ast.FuncDecl:
-		funcName := stmt.Name.Name
+		funcName = stmt.Name.Name
 		for _, s := range stmt.Body.List {
 			exprStmt, ok := s.(*ast.ExprStmt)
 			if !ok {
@@ -73,12 +81,11 @@ func astWalker(file *ast.File, fset *token.FileSet, n ast.Node) bool {
 			ident := selectorExpr.X.(*ast.Ident)
 			if ident.Name == "logrus" {
 				locationPos := ident.NamePos
-				filename, line, pos := getContext(fset.Position(locationPos).String())
-				logrus.Infof("File=%s, Function=%s, LineNo=%d, Pos=%d", filename, funcName, line, pos)
+				filename, line, pos = getContext(fset.Position(locationPos).String())
 			}
 		}
 	}
-	return true
+	return filename, funcName, line, pos
 }
 
 func getContext(s string) (filename string, line, pos int) {
