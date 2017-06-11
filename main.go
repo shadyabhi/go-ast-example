@@ -11,11 +11,6 @@ import (
 	"github.com/Sirupsen/logrus"
 )
 
-// ParsedFile  keeps info regarding parsing the file in question
-type ParsedFile struct {
-	af *ast.File
-}
-
 func init() {
 	logrus.SetFormatter(&logrus.JSONFormatter{})
 	logrus.SetLevel(logrus.DebugLevel)
@@ -81,7 +76,9 @@ func astWalker(file *ast.File, fset *token.FileSet, n ast.Node) (filename, funcN
 			ident := selectorExpr.X.(*ast.Ident)
 			if ident.Name == "logrus" {
 				locationPos := ident.NamePos
-				filename, line, pos = getContext(fset.Position(locationPos).String())
+				logMsg := callExpr.Args[0].(*ast.BasicLit)
+				_, _, pos = getContext(fset.Position(logMsg.ValuePos).String())
+				filename, line, _ = getContext(fset.Position(locationPos).String())
 			}
 		}
 	}
@@ -89,7 +86,7 @@ func astWalker(file *ast.File, fset *token.FileSet, n ast.Node) (filename, funcN
 }
 
 func getContext(s string) (filename string, line, pos int) {
-	re := regexp.MustCompile(".*\\/(.*\\.go):(\\d+):(\\d+)")
+	re := regexp.MustCompile(`.*\/(.*\.go):(\d+):(\d+)`)
 	matches := re.FindAllStringSubmatch(s, -1)
 	if len(matches) == 1 {
 		line, _ := strconv.Atoi(matches[0][2])
