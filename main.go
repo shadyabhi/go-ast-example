@@ -11,8 +11,7 @@ import (
 
 // ParsedFile  keeps info regarding parsing the file in question
 type ParsedFile struct {
-	logrusLine []int
-	af         *ast.File
+	af *ast.File
 }
 
 func init() {
@@ -20,26 +19,24 @@ func init() {
 	logrus.SetLevel(logrus.DebugLevel)
 }
 func main() {
-	pf := &ParsedFile{}
-	fset := token.NewFileSet() // positions are relative to fset
+	fset := token.NewFileSet()
 
 	var err error
-	pf.af, err = parser.ParseFile(fset, "./testcode/code.go", nil, 0)
+	file, err := parser.ParseFile(fset, "./testcode/code.go", nil, 0)
 	if err != nil {
 		logrus.Fatalf("Couldn't parse file: %s", err)
 	}
 
 	// Print AST for debugging
-	// ast.Print(fset, pf.af)
-	ifImport := checkImported(pf.af.Imports)
+	// ast.Print(fset, file)
+	ifImport := checkImported(file.Imports)
 	if ifImport {
 		logrus.Infoln("logrus imports found")
 		// Let's find line numbers
-		ast.Inspect(pf.af, func(n ast.Node) bool {
-			return astWalker(pf, fset, n)
+		ast.Inspect(file, func(n ast.Node) bool {
+			return astWalker(file, fset, n)
 		})
 	}
-	logrus.Infof("Parsed file, found: %#v", pf)
 }
 
 // checkImported checks if logrus was imported in this file
@@ -53,7 +50,7 @@ func checkImported(imports []*ast.ImportSpec) bool {
 }
 
 // astWalker walks the AST
-func astWalker(pf *ParsedFile, fset *token.FileSet, n ast.Node) bool {
+func astWalker(file *ast.File, fset *token.FileSet, n ast.Node) bool {
 	switch stmt := n.(type) {
 	case *ast.CallExpr:
 		expr, ok := stmt.Fun.(*ast.SelectorExpr)
@@ -63,7 +60,8 @@ func astWalker(pf *ParsedFile, fset *token.FileSet, n ast.Node) bool {
 		ident := expr.X.(*ast.Ident)
 		if ident.Name == "logrus" {
 			ln := fset.Position(stmt.Pos()).Line
-			pf.logrusLine = append(pf.logrusLine, ln)
+			msg := stmt.Args[0].(*ast.BasicLit).Value
+			logrus.Infof("At line %d, msg: %s", ln, msg)
 		}
 	}
 	return true
