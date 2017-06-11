@@ -9,8 +9,7 @@ import (
 	"github.com/Sirupsen/logrus"
 )
 
-// ParsedFile is a single file out of a possible set contained in a run
-// of deprehend
+// ParsedFile  keeps info regarding parsing the file in question
 type ParsedFile struct {
 	logrusLine []int
 	af         *ast.File
@@ -37,9 +36,10 @@ func main() {
 		logrus.Infoln("logrus imports found")
 		// Let's find line numbers
 		ast.Inspect(pf.af, func(n ast.Node) bool {
-			return astWalker(fset, n)
+			return astWalker(pf, fset, n)
 		})
 	}
+	logrus.Infof("Parsed file, found: %#v", pf)
 }
 
 // checkImported checks if logrus was imported in this file
@@ -53,7 +53,7 @@ func checkImported(imports []*ast.ImportSpec) bool {
 }
 
 // astWalker walks the AST
-func astWalker(fset *token.FileSet, n ast.Node) bool {
+func astWalker(pf *ParsedFile, fset *token.FileSet, n ast.Node) bool {
 	switch stmt := n.(type) {
 	case *ast.CallExpr:
 		expr, ok := stmt.Fun.(*ast.SelectorExpr)
@@ -63,7 +63,7 @@ func astWalker(fset *token.FileSet, n ast.Node) bool {
 		ident := expr.X.(*ast.Ident)
 		if ident.Name == "logrus" {
 			ln := fset.Position(stmt.Pos()).Line
-			logrus.Infof("Line number: %d", ln)
+			pf.logrusLine = append(pf.logrusLine, ln)
 		}
 	}
 	return true
