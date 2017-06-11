@@ -4,6 +4,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/Sirupsen/logrus"
@@ -67,13 +69,25 @@ func astWalker(file *ast.File, fset *token.FileSet, n ast.Node) bool {
 			if !ok {
 				continue
 			}
+
 			ident := selectorExpr.X.(*ast.Ident)
 			if ident.Name == "logrus" {
-				ln := fset.Position(stmt.Pos()).Line
-				msg := callExpr.Args[0].(*ast.BasicLit).Value
-				logrus.Infof("Function: %s:%d, msg: %s", funcName, ln, msg)
+				locationPos := ident.NamePos
+				filename, line, pos := getContext(fset.Position(locationPos).String())
+				logrus.Infof("File=%s, Function=%s, LineNo=%d, Pos=%d", filename, funcName, line, pos)
 			}
 		}
 	}
 	return true
+}
+
+func getContext(s string) (filename string, line, pos int) {
+	re := regexp.MustCompile(".*\\/(.*\\.go):(\\d+):(\\d+)")
+	matches := re.FindAllStringSubmatch(s, -1)
+	if len(matches) == 1 {
+		line, _ := strconv.Atoi(matches[0][2])
+		pos, _ := strconv.Atoi(matches[0][3])
+		return matches[0][1], line, pos
+	}
+	return "", 0, 0
 }
