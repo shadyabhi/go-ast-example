@@ -58,6 +58,7 @@ func main() {
 			return true
 		})
 	}
+	// Spit-out modified AST to stdout
 	fset = token.NewFileSet()
 	if err = printer.Fprint(os.Stdout, fset, file); err != nil {
 		logrus.Fatalf("Error printing new AST")
