@@ -33,14 +33,17 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("Couldn't open file to write ast: %s", err)
 	}
-	// Print AST for debugging
+
+	// Print AST for debugging to a file
 	err = ast.Fprint(astFile, fset, file, func(name string, value reflect.Value) bool {
 		return true
 	})
 	if err != nil {
 		logrus.Fatalf("Error saving AST to file: %s", err)
 	}
-	astFile.Close()
+	if err = astFile.Close(); err != nil {
+		logrus.Fatalf("Error closing AST file: %s", err)
+	}
 
 	logrusName, logrusImported := checkImported(file.Imports)
 
@@ -77,7 +80,7 @@ func checkImported(imports []*ast.ImportSpec) (string, bool) {
 	return "", false
 }
 
-// astWalker walks the AST
+// astWalker walks the AST and modifies it as needed
 func astWalker(logrusName string, fset *token.FileSet, n ast.Node) (filename, funcName string, line, pos int) {
 	switch stmt := n.(type) {
 	case *ast.FuncDecl:
@@ -98,10 +101,13 @@ func astWalker(logrusName string, fset *token.FileSet, n ast.Node) (filename, fu
 
 			ident := selectorExpr.X.(*ast.Ident)
 			if ident.Name == logrusName {
+				// Get to the first argument of logrus.Level
 				locationPos := ident.NamePos
 				logMsg := callExpr.Args[0].(*ast.BasicLit)
 				_, _, pos = getContext(fset.Position(logMsg.ValuePos).String())
 				filename, line, _ = getContext(fset.Position(locationPos).String())
+
+				// Prefix log messags with context information
 				newLogMsg := &ast.BasicLit{
 					ValuePos: logMsg.ValuePos,
 					Kind:     token.STRING,
