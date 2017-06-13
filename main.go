@@ -1,9 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
+	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,8 +17,9 @@ import (
 
 func init() {
 	logrus.SetFormatter(&logrus.JSONFormatter{})
-	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetLevel(logrus.InfoLevel)
 }
+
 func main() {
 	fset := token.NewFileSet()
 
@@ -24,9 +29,20 @@ func main() {
 		logrus.Fatalf("Couldn't parse file: %s", err)
 	}
 
+	astFile, err := os.OpenFile("./ast", os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		logrus.Fatalf("Couldn't open file to write ast: %s", err)
+	}
 	// Print AST for debugging
-	// ast.Print(fset, file)
-	logrusImported := checkImported(file.Imports)
+	err = ast.Fprint(astFile, fset, file, func(name string, value reflect.Value) bool {
+		return true
+	})
+	if err != nil {
+		logrus.Fatalf("Error saving AST to file: %s", err)
+	}
+	astFile.Close()
+
+	logrusName, logrusImported := checkImported(file.Imports)
 
 	var filename, funcName string
 	var line, pos int
@@ -34,28 +50,34 @@ func main() {
 	if logrusImported {
 		logrus.Debugf("logrus imports found")
 		ast.Inspect(file, func(n ast.Node) bool {
-			filename, funcName, line, pos = astWalker(file, fset, n)
+			filename, funcName, line, pos = astWalker(logrusName, fset, n)
 			// Not all nodes have logrus
 			if filename != "" {
-				logrus.Infof("File=%s, Function=%s, LineNo=%d, Pos=%d", filename, funcName, line, pos)
+				logrus.Debugf("File=%s, Function=%s, LineNo=%d, Pos=%d", filename, funcName, line, pos)
 			}
 			return true
 		})
 	}
+	fset = token.NewFileSet()
+	if err = printer.Fprint(os.Stdout, fset, file); err != nil {
+		logrus.Fatalf("Error printing new AST")
+	}
 }
 
 // checkImported checks if logrus was imported in this file
-func checkImported(imports []*ast.ImportSpec) bool {
+func checkImported(imports []*ast.ImportSpec) (string, bool) {
+	var importName string
 	for _, imp := range imports {
 		if strings.Contains(imp.Path.Value, "logrus") {
-			return true
+			importName = imp.Name.Name
+			return importName, true
 		}
 	}
-	return false
+	return "", false
 }
 
 // astWalker walks the AST
-func astWalker(file *ast.File, fset *token.FileSet, n ast.Node) (filename, funcName string, line, pos int) {
+func astWalker(logrusName string, fset *token.FileSet, n ast.Node) (filename, funcName string, line, pos int) {
 	switch stmt := n.(type) {
 	case *ast.FuncDecl:
 		funcName = stmt.Name.Name
@@ -74,11 +96,17 @@ func astWalker(file *ast.File, fset *token.FileSet, n ast.Node) (filename, funcN
 			}
 
 			ident := selectorExpr.X.(*ast.Ident)
-			if ident.Name == "logrus" {
+			if ident.Name == logrusName {
 				locationPos := ident.NamePos
 				logMsg := callExpr.Args[0].(*ast.BasicLit)
 				_, _, pos = getContext(fset.Position(logMsg.ValuePos).String())
 				filename, line, _ = getContext(fset.Position(locationPos).String())
+				newLogMsg := &ast.BasicLit{
+					ValuePos: logMsg.ValuePos,
+					Kind:     token.STRING,
+					Value:    fmt.Sprintf("\"%s:%s:%d - ", filename, funcName, line) + logMsg.Value[1:],
+				}
+				*logMsg = *newLogMsg
 			}
 		}
 	}
