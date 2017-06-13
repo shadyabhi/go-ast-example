@@ -1,0 +1,5 @@
+# AST Example
+
+This is an example code to modify AST on the fly to modify code.
+
+Here, the code modifies other golang source code under `testdata/code.go` to add filename, function name, line number in all logging messages
